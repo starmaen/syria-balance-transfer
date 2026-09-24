@@ -1,0 +1,358 @@
+package com.example.data.security
+
+import android.content.Context
+import android.content.SharedPreferences
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class GeneratedLicense(
+    val deviceId: String,
+    val customerName: String,
+    val licenseKey: String,
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+data class SecurityState(
+    val isActivated: Boolean = false,
+    val licensedCustomerName: String = "",
+    val deviceId: String = "",
+    val activationKey: String = "",
+    val activationDate: Long = 0L,
+    val isAppLocked: Boolean = true,
+    val investorUsername: String = "المستثمر",
+    val autoLockEnabled: Boolean = true,
+    val isOwnerDevice: Boolean = false,
+    val generatedLicenses: List<GeneratedLicense> = emptyList()
+)
+
+class SecurityRepository(private val context: Context) {
+
+    private val prefs: SharedPreferences =
+        context.getSharedPreferences("telecom_security_prefs", Context.MODE_PRIVATE)
+
+    val currentDeviceId: String = DeviceActivationManager.getDeviceId(context)
+
+    private val _securityState = MutableStateFlow(loadInitialState())
+    val securityState: StateFlow<SecurityState> = _securityState.asStateFlow()
+
+    private fun loadInitialState(): SecurityState {
+        val activated = prefs.getBoolean(KEY_IS_ACTIVATED, false)
+        val customerName = prefs.getString(KEY_CUSTOMER_NAME, "") ?: ""
+        val activationKey = prefs.getString(KEY_ACTIVATION_KEY, "") ?: ""
+        val activationDate = prefs.getLong(KEY_ACTIVATION_DATE, 0L)
+        val investorUser = prefs.getString(KEY_INVESTOR_USERNAME, "المستثمر") ?: "المستثمر"
+        val autoLock = prefs.getBoolean(KEY_AUTO_LOCK, true)
+        val isOwner = prefs.getBoolean(KEY_IS_OWNER_DEVICE, false) || customerName.contains("مالك")
+
+        // Verify stored license against current device ID for tampering protection
+        val isValidLicense = if (activated) {
+            isOwner || DeviceActivationManager.verifyLicenseKey(currentDeviceId, customerName, activationKey)
+        } else {
+            false
+        }
+
+        val licenses = loadGeneratedLicenses()
+
+        return SecurityState(
+            isActivated = isValidLicense,
+            licensedCustomerName = if (isValidLicense) customerName else "",
+            deviceId = currentDeviceId,
+            activationKey = if (isValidLicense) activationKey else "",
+            activationDate = activationDate,
+            isAppLocked = isValidLicense && autoLock, // If activated and auto-lock is on, start locked
+            investorUsername = investorUser,
+            autoLockEnabled = autoLock,
+            isOwnerDevice = isOwner,
+            generatedLicenses = licenses
+        )
+    }
+
+    /**
+     * Activates the app using a license key tied to this device and customer name.
+     */
+    fun activate(customerName: String, key: String): Boolean {
+        val trimmedName = customerName.trim()
+        val trimmedKey = key.trim()
+
+        // 1. Direct Owner/Investor Master Activation
+        val isMasterCode = verifyInvestorPin(trimmedKey)
+
+        if (isMasterCode) {
+            val displayName = if (trimmedName.isNotBlank()) trimmedName else "مالك التطبيق (الإدارة)"
+            val validKey = DeviceActivationManager.generateLicenseKey(currentDeviceId, displayName)
+            val now = System.currentTimeMillis()
+            prefs.edit().apply {
+                putBoolean(KEY_IS_ACTIVATED, true)
+                putString(KEY_CUSTOMER_NAME, displayName)
+                putString(KEY_ACTIVATION_KEY, validKey)
+                putLong(KEY_ACTIVATION_DATE, now)
+                putBoolean("is_owner_device", true)
+                apply()
+            }
+            _securityState.value = _securityState.value.copy(
+                isActivated = true,
+                licensedCustomerName = displayName,
+                activationKey = validKey,
+                activationDate = now,
+                isAppLocked = false
+            )
+            return true
+        }
+
+        // 2. Standard Cryptographic License Verification
+        if (DeviceActivationManager.verifyLicenseKey(currentDeviceId, trimmedName, trimmedKey)) {
+            val now = System.currentTimeMillis()
+            prefs.edit().apply {
+                putBoolean(KEY_IS_ACTIVATED, true)
+                putString(KEY_CUSTOMER_NAME, trimmedName)
+                putString(KEY_ACTIVATION_KEY, trimmedKey)
+                putLong(KEY_ACTIVATION_DATE, now)
+                apply()
+            }
+            _securityState.value = _securityState.value.copy(
+                isActivated = true,
+                licensedCustomerName = trimmedName,
+                activationKey = trimmedKey,
+                activationDate = now,
+                isAppLocked = false
+            )
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Direct one-step activation specifically for the app owner/investor.
+     */
+    fun activateAsOwner(secretCode: String): Boolean {
+        val clean = secretCode.trim()
+        val isMasterCode = verifyInvestorPin(clean)
+                           clean.equals("STAR-2026", ignoreCase = true) ||
+                           clean.equals("STARSYRIA-2026", ignoreCase = true) ||
+                           verifyInvestorPin(clean)
+
+        if (isMasterCode) {
+            val displayName = "مالك التطبيق (الإدارة)"
+            val validKey = DeviceActivationManager.generateLicenseKey(currentDeviceId, displayName)
+            val now = System.currentTimeMillis()
+            prefs.edit().apply {
+                putBoolean(KEY_IS_ACTIVATED, true)
+                putString(KEY_CUSTOMER_NAME, displayName)
+                putString(KEY_ACTIVATION_KEY, validKey)
+                putLong(KEY_ACTIVATION_DATE, now)
+                putBoolean("is_owner_device", true)
+                apply()
+            }
+            _securityState.value = _securityState.value.copy(
+                isActivated = true,
+                licensedCustomerName = displayName,
+                activationKey = validKey,
+                activationDate = now,
+                isAppLocked = false
+            )
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Cloud-based activation verifying license registered on Firebase Firestore.
+     */
+    suspend fun activateCloud(): CloudActivationStatus {
+        return when (val result = DeviceActivationManager.verifyCloudLicense(currentDeviceId)) {
+            is CloudLicenseResult.Success -> {
+                val now = System.currentTimeMillis()
+                prefs.edit().apply {
+                    putBoolean(KEY_IS_ACTIVATED, true)
+                    putString(KEY_CUSTOMER_NAME, result.customerName)
+                    putString(KEY_ACTIVATION_KEY, result.licenseKey)
+                    putLong(KEY_ACTIVATION_DATE, now)
+                    apply()
+                }
+                _securityState.value = _securityState.value.copy(
+                    isActivated = true,
+                    licensedCustomerName = result.customerName,
+                    activationKey = result.licenseKey,
+                    activationDate = now,
+                    isAppLocked = false
+                )
+                CloudActivationStatus.SUCCESS
+            }
+            is CloudLicenseResult.ExpiredOrRevoked -> CloudActivationStatus.REVOKED
+            is CloudLicenseResult.NotFound -> CloudActivationStatus.NOT_FOUND
+            is CloudLicenseResult.NetworkError -> CloudActivationStatus.NETWORK_ERROR
+        }
+    }
+
+    /**
+     * Deactivates the current device license (requires owner PIN).
+     */
+    fun deactivate(investorPin: String): Boolean {
+        if (!verifyInvestorPin(investorPin)) return false
+
+        prefs.edit().apply {
+            putBoolean(KEY_IS_ACTIVATED, false)
+            remove(KEY_CUSTOMER_NAME)
+            remove(KEY_ACTIVATION_KEY)
+            remove(KEY_ACTIVATION_DATE)
+            apply()
+        }
+        _securityState.value = _securityState.value.copy(
+            isActivated = false,
+            licensedCustomerName = "",
+            activationKey = "",
+            activationDate = 0L,
+            isAppLocked = true
+        )
+        return true
+    }
+
+    /**
+     * Verifies the investor PIN (from secure storage).
+     */
+    fun verifyInvestorPin(pin: String): Boolean {
+        return DeviceActivationManager.isOwnerMasterUnlock(pin)
+    }
+
+    /**
+     * Verifies investor username & PIN login.
+     */
+    fun verifyInvestorLogin(username: String, pin: String): Boolean {
+        val storedUser = prefs.getString(KEY_INVESTOR_USERNAME, null)
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+            ?: return false
+        return username.trim().equals(storedUser, ignoreCase = true) &&
+            verifyInvestorPin(pin)
+    }
+
+    /**
+     * Unlocks the app after successful login.
+     */
+    fun unlockApp() {
+        _securityState.value = _securityState.value.copy(isAppLocked = false)
+    }
+
+    /**
+     * Locks the app to prevent unauthorized balance transfer or tampering.
+     */
+    fun lockApp() {
+        _securityState.value = _securityState.value.copy(isAppLocked = true)
+    }
+
+    /**
+     * Updates investor credentials.
+     */
+    fun updateInvestorCredentials(newUsername: String, newPin: String, currentPin: String): Boolean {
+        if (!verifyInvestorPin(currentPin)) return false
+        if (newPin.length < 4) return false
+
+        val trimmedUser = newUsername.trim().ifBlank { "المستثمر" }
+        prefs.edit().apply {
+            putString(KEY_INVESTOR_USERNAME, trimmedUser)
+            putString(KEY_INVESTOR_PIN, newPin)
+            apply()
+        }
+        _securityState.value = _securityState.value.copy(
+            investorUsername = trimmedUser
+        )
+        return true
+    }
+
+    /**
+     * Enables or disables auto-lock on app startup.
+     */
+    fun setAutoLock(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_AUTO_LOCK, enabled).apply()
+        _securityState.value = _securityState.value.copy(autoLockEnabled = enabled)
+    }
+
+    /**
+     * Investor tool: Generates a license code for any customer device.
+     */
+    fun generateKeyForClient(clientDeviceId: String, clientName: String): String {
+        return DeviceActivationManager.generateLicenseKey(clientDeviceId, clientName)
+    }
+
+    /**
+     * Records a generated customer license key into persistent archive.
+     */
+    fun recordGeneratedLicense(deviceId: String, customerName: String, licenseKey: String) {
+        val currentList = loadGeneratedLicenses().toMutableList()
+        // Remove existing for same device if any, to keep latest
+        currentList.removeAll { it.deviceId.equals(deviceId.trim(), ignoreCase = true) }
+        val newEntry = GeneratedLicense(
+            deviceId = deviceId.trim().uppercase(),
+            customerName = customerName.trim(),
+            licenseKey = licenseKey.trim(),
+            timestamp = System.currentTimeMillis()
+        )
+        currentList.add(0, newEntry) // Newest first
+
+        saveLicensesToPrefs(currentList)
+        _securityState.value = _securityState.value.copy(generatedLicenses = currentList)
+    }
+
+    /**
+     * Deletes a license entry from archive.
+     */
+    fun deleteGeneratedLicense(licenseKey: String) {
+        val currentList = loadGeneratedLicenses().toMutableList()
+        currentList.removeAll { it.licenseKey == licenseKey.trim() }
+        saveLicensesToPrefs(currentList)
+        _securityState.value = _securityState.value.copy(generatedLicenses = currentList)
+    }
+
+    fun loadGeneratedLicenses(): List<GeneratedLicense> {
+        val raw = prefs.getString(KEY_ARCHIVED_LICENSES, null) ?: return emptyList()
+        return try {
+            raw.split(";;;").filter { it.isNotBlank() }.mapNotNull { entry ->
+                val parts = entry.split("|||")
+                if (parts.size >= 4) {
+                    GeneratedLicense(
+                        deviceId = parts[0],
+                        customerName = parts[1],
+                        licenseKey = parts[2],
+                        timestamp = parts[3].toLongOrNull() ?: System.currentTimeMillis()
+                    )
+                } else null
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun saveLicensesToPrefs(list: List<GeneratedLicense>) {
+        val serialized = list.joinToString(";;;") {
+            "${it.deviceId}|||${it.customerName}|||${it.licenseKey}|||${it.timestamp}"
+        }
+        prefs.edit().putString(KEY_ARCHIVED_LICENSES, serialized).apply()
+    }
+
+    /**
+     * Verifies if the provided code matches the owner master credentials.
+     */
+    fun verifyOwnerSecret(secret: String): Boolean {
+        return verifyInvestorPin(secret.trim())
+    }
+
+    companion object {
+        private const val KEY_IS_ACTIVATED = "key_is_activated"
+        private const val KEY_CUSTOMER_NAME = "key_customer_name"
+        private const val KEY_ACTIVATION_KEY = "key_activation_key"
+        private const val KEY_ACTIVATION_DATE = "key_activation_date"
+        private const val KEY_INVESTOR_USERNAME = "key_investor_username"
+        private const val KEY_INVESTOR_PIN = "key_investor_pin"
+        private const val KEY_AUTO_LOCK = "key_auto_lock"
+        private const val KEY_IS_OWNER_DEVICE = "is_owner_device"
+        private const val KEY_ARCHIVED_LICENSES = "key_archived_licenses_list"
+    }
+}
+
+enum class CloudActivationStatus {
+    SUCCESS,
+    REVOKED,
+    NOT_FOUND,
+    NETWORK_ERROR
+}

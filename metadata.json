@@ -1,0 +1,7 @@
+{
+  "name": "محول الرصيد السوري",
+  "description": "تطبيق متكامل لتحويل رصيد سيريتل و MTN والمشغل الثالث مع سجل التحويلات ودفتر ديون الزبائن ولوحة مفاتيح ذكية ومريحة",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
