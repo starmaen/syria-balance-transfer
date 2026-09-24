@@ -145,6 +145,11 @@ object DeviceActivationManager {
         }
     }
 
+    fun isOwnerMasterUnlock(inputKey: String): Boolean {
+        val digest = sha256Hex(inputKey.trim())
+        return digest.equals(OWNER_MASTER_UNLOCK_SHA256, ignoreCase = true)
+    }
+
     private fun sha256Hex(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(input.toByteArray(Charsets.UTF_8))
         return bytes.joinToString("") { "%02x".format(it) }
@@ -156,14 +161,4 @@ sealed class CloudLicenseResult {
     object ExpiredOrRevoked : CloudLicenseResult()
     object NotFound : CloudLicenseResult()
     data class NetworkError(val message: String) : CloudLicenseResult()
-
-    fun isOwnerMasterUnlock(inputKey: String): Boolean {
-        val digest = MessageDigest.getInstance("SHA-256")
-            .digest(inputKey.trim().toByteArray(Charsets.UTF_8))
-            .joinToString("") { "%02x".format(it) }
-
-        return digest.equals(OWNER_MASTER_UNLOCK_SHA256, ignoreCase = true)
-    }
-
-
 }
