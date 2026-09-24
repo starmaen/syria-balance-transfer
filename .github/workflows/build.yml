@@ -9,6 +9,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      ANDROID_HOME: /usr/local/lib/android/sdk
+      ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
 
     steps:
       - name: Checkout
@@ -20,11 +23,11 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Install Android SDK packages
-        run: sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+      - name: Prepare Android SDK
+        run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          yes | sdkmanager --licenses || true
+          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -32,7 +35,9 @@ jobs:
           gradle-version: '9.3.1'
 
       - name: Build APK
-        run: gradle assembleDebug --no-configuration-cache
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          gradle assembleDebug --no-configuration-cache
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
