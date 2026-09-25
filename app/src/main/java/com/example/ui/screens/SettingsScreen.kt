@@ -671,6 +671,72 @@ fun SettingsScreen(
                 }
             }
 
+            // 👑 OWNER PORTAL CARD
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showOwnerPortalDialog = true }
+                    .testTag("card_owner_portal_settings"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFF8E1)
+                ),
+                border = BorderStroke(
+                    1.5.dp,
+                    Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100)))
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Brush.linearGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100)))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Column {
+                            Text(
+                                text = "👑 بوابة المالك وتوليد الأكواد",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFB71C1C)
+                            )
+                            Text(
+                                text = "توليد أكواد التفعيل للزبائن وسجل التراخيص الصادرة",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color(0xFF5D4037)
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { showOwnerPortalDialog = true },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("فتح 👑", fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+
+            // Auto-lock Switch
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -743,6 +809,32 @@ fun SettingsScreen(
                 )
             }
 
+            // Discreet button to unlock investor tools
+            if (!isInvestorToolsUnlocked) {
+                TextButton(
+                    onClick = { showUnlockInvestorToolsDialog = true },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Icon(Icons.Default.AdminPanelSettings, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("أدوات المستثمر والمطور (مقفلة)", fontSize = 11.sp, color = MaterialTheme.colorScheme.outline)
+                }
+            } else {
+                OutlinedButton(
+                    onClick = {
+                        isInvestorToolsUnlocked = false
+                        Toast.makeText(context, "تم إخفاء وقفل أدوات المستثمر بنجاح", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("قفل وإخفاء أدوات المستثمر والمولد", fontSize = 12.sp)
+                }
+            }
+        }
+
+        // Section 6: Investor Tool: License Key Generator for Other Clients (ONLY VISIBLE IF UNLOCKED BY INVESTOR)
         if (isInvestorToolsUnlocked) {
             OperatorSettingCard(
                 title = "أداة المستثمر: مولّد مفاتيح الترخيص للزبائن (مفعل)",
