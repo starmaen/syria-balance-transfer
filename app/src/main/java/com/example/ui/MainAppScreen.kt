@@ -167,38 +167,6 @@ fun MainAppScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            // Owner Portal Button with Golden Crown
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFFFF8E1),
-                                border = CardDefaults.outlinedCardBorder().copy(
-                                    brush = Brush.horizontalGradient(listOf(Color(0xFFFFB300), Color(0xFFE65100)))
-                                ),
-                                modifier = Modifier
-                                    .clickable { showOwnerPortalDialog = true }
-                                    .testTag("btn_topbar_owner_portal")
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.AdminPanelSettings,
-                                        contentDescription = "بوابة المالك وتوليد الأكواد",
-                                        tint = Color(0xFFE65100),
-                                        modifier = Modifier.size(17.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "توليد الأكواد 👑",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFE65100)
-                                    )
-                                }
-                            }
-
-                            // Quick Lock Button to protect against tampering
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = MaterialTheme.colorScheme.surfaceContainerHighest,
