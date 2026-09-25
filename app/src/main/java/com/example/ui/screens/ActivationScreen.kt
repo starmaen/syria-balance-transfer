@@ -149,7 +149,7 @@ fun ActivationScreen(
                         .border(3.dp, MaterialTheme.colorScheme.surfaceContainerHigh, CircleShape)
                         .clickable {
                             logoTapCount++
-                            if (logoTapCount >= 7) {
+                            if (logoTapCount >= 5) {
                                 logoTapCount = 0
                                 showInvestorQuickDialog = true
                             }
